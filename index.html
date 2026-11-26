@@ -1,12 +1,138 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CivicFix</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CivicFix — Report an Issue</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f3f6f4;
+      color: #17352b;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+    form {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 4px 18px #0001;
+    }
+    label { display: block; margin-top: 16px; font-weight: bold; }
+    input, textarea, select, button {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 12px;
+      margin-top: 6px;
+      border: 1px solid #bbc9c1;
+      border-radius: 7px;
+      font: inherit;
+    }
+    textarea { min-height: 110px; }
+    button {
+      background: #16734b;
+      color: white;
+      border: 0;
+      cursor: pointer;
+      margin-top: 18px;
+    }
+    button:disabled { opacity: 0.6; }
+    #locationButton { background: #425f52; }
+    #message { margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <h1>CivicFix</h1>
+  <p>Report a local issue so it can be tracked.</p>
+
+  <form id="issueForm">
+    <label for="title">Issue title</label>
+    <input id="title" required placeholder="For example: Pothole on Main Road">
+
+    <label for="description">Description</label>
+    <textarea id="description" required placeholder="Describe the issue"></textarea>
+
+    <label for="category">Category</label>
+    <select id="category" required>
+      <option value="">Choose a category</option>
+      <option>Road</option>
+      <option>Streetlight</option>
+      <option>Garbage</option>
+      <option>Water</option>
+      <option>Other</option>
+    </select>
+
+    <button type="button" id="locationButton">Use my current location</button>
+    <p id="locationStatus">Location not added (optional).</p>
+
+    <button type="submit" id="submitButton">Submit report</button>
+    <p id="message" role="status"></p>
+  </form>
+
+  <script>
+    const form = document.getElementById("issueForm");
+    const message = document.getElementById("message");
+    const submitButton = document.getElementById("submitButton");
+    const locationStatus = document.getElementById("locationStatus");
+
+    let latitude = null;
+    let longitude = null;
+
+    document.getElementById("locationButton").addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        locationStatus.textContent = "Location is not available in this browser.";
+        return;
+      }
+
+      locationStatus.textContent = "Getting your location…";
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          latitude = position.coords.latitude;
+          longitude = position.coords.longitude;
+          locationStatus.textContent = "Location added.";
+        },
+        () => {
+          locationStatus.textContent =
+            "Could not get location. Check browser location permission.";
+        }
+      );
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      submitButton.disabled = true;
+      message.textContent = "Submitting…";
+
+      const report = {
+        title: document.getElementById("title").value.trim(),
+        description: document.getElementById("description").value.trim(),
+        category: document.getElementById("category").value,
+        latitude,
+        longitude
+      };
+
+      try {
+        const response = await fetch("http://localhost:5000/api/issues", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(report)
+        });
+
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Submission failed.");
+
+        message.textContent = `Report submitted successfully. ID: ${result.id}`;
+        form.reset();
+        latitude = null;
+        longitude = null;
+        locationStatus.textContent = "Location not added (optional).";
+      } catch (error) {
+        message.textContent = `Error: ${error.message}`;
+      } finally {
+        submitButton.disabled = false;
+      }
+    });
+  </script>
+</body>
 </html>

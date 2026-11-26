@@ -1,40 +1,61 @@
-const path = require("path");
 require("dotenv").config({
-  path: path.resolve(__dirname, "../.env"),
+  path: require("path").resolve(__dirname, "../.env"),
 });
-
 const express = require("express");
-const cors = require("cors");
+const path = require("path");
+const fs = require("fs");
 const pool = require("./db");
 
 const app = express();
+const cors = require("cors");
+
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+    ],
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 const PORT = process.env.PORT || 5000;
+const uploadsPath = path.resolve(__dirname, "../uploads");
 
-app.use(cors());
+fs.mkdirSync(uploadsPath, { recursive: true });
+
+app.use(cors({ origin: true }));
 app.use(express.json());
+app.use("/uploads", express.static(uploadsPath));
 
-// Confirm the backend is running
-app.get("/api/health", (req, res) => {
+app.get("/api/health", (_req, res) => {
   res.json({ message: "CivicFix backend is running" });
 });
 
-// Check the Supabase connection through the backend
-app.get("/api/db-health", async (req, res) => {
+app.get("/api/db-health", async (_req, res) => {
   try {
-    const result = await pool.query("SELECT NOW()");
-    res.json({
-      message: "Supabase database connected",
-      time: result.rows[0].now,
-    });
+    await pool.query("SELECT 1");
+    res.json({ message: "Supabase database connected" });
   } catch (error) {
-    console.error("Database health check failed:", error.message);
-    res.status(500).json({ error: "Could not connect to the database" });
+    console.error("Database connection error:", error.message);
+    res.status(500).json({
+      error: "Could not connect to the database",
+    });
   }
 });
 
-// Issue reporting routes
+app.use("/api/auth", require("./routes/auth"));
 app.use("/api/issues", require("./routes/issues"));
+app.use("/api/notifications", require("./routes/notifications"));
 
-app.listen(PORT, () => {
-  console.log(`Backend running at http://localhost:${PORT}`);
+app.use((error, _req, res, _next) => {
+  console.error("Request failed:", error.message);
+  const status = error.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+  res.status(status).json({
+    error: error.message || "Invalid request",
+  });
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Backend running on port ${PORT}`);
 });
